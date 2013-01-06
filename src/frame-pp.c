@@ -28,7 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 // **************************************************************************
 #define X_FORCES
-// experimental: 
+// experimental:
 // * inner loop: compute forces instead of accelerations (symetric, saves some multiplications)
 // * afterwards, compute accelerations (acc = force / mass)
 // --> up to 30% faster
@@ -36,7 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
 // **************************************************************************
-// experimental: 
+// experimental:
 // use mixed-precision for better accuracy (good for proper physics mode)
 // * real1: accumulated accelerations
 // * real2: positions and distance vectors
@@ -46,9 +46,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #define real1 float
 //#define real1 double
 
-// real2 => use double for positions
+// real2 => use double for positions and distances
 #define real2 float
+#define real2b float
 //#define real2 double
+//#define real2b double
 
 // real3 => use double everywhere else
 #define real3 float
@@ -197,9 +199,9 @@ static void do_processFramePP(particle_vectors pos, acc_vectors accel,
 #endif
         for (j = 0; j < i; j++) {
             //VectorNew(dv);
-            real2 dv_x;
-            real2 dv_y;
-            real2 dv_z;
+            real2b dv_x;
+            real2b dv_y;
+            real2b dv_z;
             real3 squareDistance;
 #ifdef X_FORCES
             real3 force;
@@ -315,6 +317,10 @@ void processFramePP(int start, int amount) {
         pos.y[i] = framebase[i].pos[1];
         pos.z[i] = framebase[i].pos[2];
         pos.mass[i] = state.particleDetail[i].mass;
+#ifdef X_FORCES
+        // need to avoid division by zero
+        if (fabs(pos.mass[i]) < 0.00001) pos.mass[i] = copysignf(0.0001, pos.mass[i]);
+#endif
     }
 
 
