@@ -26,6 +26,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <omp.h> // VC has to include this header to build the correct manifest to find vcom.dll or vcompd.dll
 #endif
 
+// real1 => use double for accumulating accelerations
+#define real1 double
+
+// real2 => use double for positions
+#define real2 float
+//#define real2 double
+
+// real3 => use double everywhere
+#define real3 float
+//#define real3 double
+//#define copysignf copysign
+
 /* ************************************************************************** */
 /* How to allocate memory with 16byte alignment?                              */
 /* ************************************************************************** */
@@ -56,7 +68,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
         #include <malloc.h>
 
         // use memalign -- seems this is the best choice for most unix/linux versions
-        #define MALLOC_ALIGNED(target, size, alignment) {target =  (float*) memalign(alignment, size);}
+        #define MALLOC_ALIGNED(target, size, alignment) {target =  (real3 *) memalign(alignment, size);}
+        #define MALLOC_ALIGNED1(target, size, alignment) {target =  (real1 *) memalign(alignment, size);}
+        #define MALLOC_ALIGNED2(target, size, alignment) {target =  (real2 *) memalign(alignment, size);}
         #define FREE_ALIGNED(target)                    {free(target);}
 
     #else
@@ -85,16 +99,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
 typedef struct {
-    float * __restrict__ x;
-    float * __restrict__ y;
-    float * __restrict__ z;
-    float * __restrict__ mass;
+    real2 * __restrict__ x;
+    real2 * __restrict__ y;
+    real2 * __restrict__ z;
+    real3 * __restrict__ mass;
 } particle_vectors;
 
 typedef struct {
-    float * __restrict__ x;
-    float * __restrict__ y;
-    float * __restrict__ z;
+    real1 * __restrict__ x;
+    real1 * __restrict__ y;
+    real1 * __restrict__ z;
 } acc_vectors;
 
 
@@ -130,16 +144,16 @@ static void do_processFramePP(particle_vectors pos, acc_vectors accel,
 #endif
     for (i = start; i < amount; i++) {
         //VectorNew(p1_pos);
-        float p1_pos_x;
-        float p1_pos_y;
-        float p1_pos_z;
-        float p1_mass;
+        real2 p1_pos_x;
+        real2 p1_pos_y;
+        real2 p1_pos_z;
+        real3 p1_mass;
 
         //VectorNew(p1_vel);
         //VectorZero(p1_vel);
-        float p1_accel_x = 0.0f;
-        float p1_accel_y = 0.0f;
-        float p1_accel_z = 0.0f;
+        real1 p1_accel_x = 0.0;
+        real1 p1_accel_y = 0.0;
+        real1 p1_accel_z = 0.0;
 
         int j;
 
@@ -155,13 +169,13 @@ static void do_processFramePP(particle_vectors pos, acc_vectors accel,
 #endif
         for (j = 0; j < i; j++) {
             //VectorNew(dv);
-            float dv_x;
-            float dv_y;
-            float dv_z;
-            float squareDistance;
-            float force1;
-            float force2;
-            float invDistance;
+            real2 dv_x;
+            real2 dv_y;
+            real2 dv_z;
+            real3 squareDistance;
+            real3 force1;
+            real3 force2;
+            real3 invDistance;
 
             dv_x = pos.x[j] - p1_pos_x;
             dv_y = pos.y[j] - p1_pos_y;
@@ -174,7 +188,7 @@ static void do_processFramePP(particle_vectors pos, acc_vectors accel,
             squareDistance += MIN_STEP2;
 
 #if !defined(USE_FIXED_PHYSICS) && !defined(USE_MODIFIED_PHYSICS)
-	    invDistance = 1.0f / squareDistance;               // 1.0 / (Distance^2)
+	    invDistance = (real3)1.0 / squareDistance;               // 1.0 / (Distance^2)
             force1 = p1_mass * pos.mass[j] * invDistance;
             force2 = force1;
 #else
@@ -183,7 +197,7 @@ static void do_processFramePP(particle_vectors pos, acc_vectors accel,
 #else
     //USE_FIXED_PHYSICS                                        // this is a shortcut to compute 1.0/(sqrt(sqDist) * sqDist)
 	    squareDistance *= squareDistance * squareDistance; //    distance ^6
-	    invDistance  = 1.0f / sqrtf(squareDistance);       //    inverse distance ^3/2
+	    invDistance  = (real3)1.0 / sqrtf(squareDistance);       //    inverse distance ^3/2
 #endif
             force1 = pos.mass[j] * invDistance;
             force2 = p1_mass     * invDistance;
@@ -225,20 +239,20 @@ void processFramePP(int start, int amount) {
 
     // create arrays, aligned to 16 bytes
 
-    MALLOC_ALIGNED( pos.x, sizeof(float)*(particles_max + 16), 16);
-    MALLOC_ALIGNED( pos.y, sizeof(float)*(particles_max + 16), 16);
-    MALLOC_ALIGNED( pos.z, sizeof(float)*(particles_max + 16), 16);
-    MALLOC_ALIGNED( pos.mass, sizeof(float)*(particles_max + 16), 16);
+    MALLOC_ALIGNED2( pos.x, sizeof(real2)*(particles_max + 16), 16);
+    MALLOC_ALIGNED2( pos.y, sizeof(real2)*(particles_max + 16), 16);
+    MALLOC_ALIGNED2( pos.z, sizeof(real2)*(particles_max + 16), 16);
+    MALLOC_ALIGNED( pos.mass, sizeof(real3)*(particles_max + 16), 16);
     //memset(pos.x, 0, sizeof(float) * (particles_max + 16));
     //memset(pos.y, 0, sizeof(float) * (particles_max + 16));
     //memset(pos.z, 0, sizeof(float) * (particles_max + 16));
     //memset(pos.mass, 0, sizeof(float) * (particles_max + 16));
-    MALLOC_ALIGNED( accel.x, sizeof(float)*(particles_max + 16), 16);
-    MALLOC_ALIGNED( accel.y, sizeof(float)*(particles_max + 16), 16);
-    MALLOC_ALIGNED( accel.z, sizeof(float)*(particles_max + 16), 16);
-    memset(accel.x, 0, sizeof(float) * (particles_max + 16));
-    memset(accel.y, 0, sizeof(float) * (particles_max + 16));
-    memset(accel.z, 0, sizeof(float) * (particles_max + 16));
+    MALLOC_ALIGNED1( accel.x, sizeof(real1)*(particles_max + 16), 16);
+    MALLOC_ALIGNED1( accel.y, sizeof(real1)*(particles_max + 16), 16);
+    MALLOC_ALIGNED1( accel.z, sizeof(real1)*(particles_max + 16), 16);
+    memset(accel.x, 0, sizeof(real1) * (particles_max + 16));
+    memset(accel.y, 0, sizeof(real1) * (particles_max + 16));
+    memset(accel.z, 0, sizeof(real1) * (particles_max + 16));
 
 
     // copy frame data to vector-friendly arrays
