@@ -26,17 +26,39 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <omp.h> // VC has to include this header to build the correct manifest to find vcom.dll or vcompd.dll
 #endif
 
+// **************************************************************************
+#define X_FORCES
+// experimental: 
+// * inner loop: compute forces instead of accelerations (symetric, saves some multiplications)
+// * afterwards, compute accelerations (acc = force / mass)
+// --> up to 30% faster
+// **************************************************************************
+
+
+// **************************************************************************
+// experimental: 
+// use mixed-precision for better accuracy (good for proper physics mode)
+// * real1: accumulated accelerations
+// * real2: positions and distance vectors
+// * real3: inner force calculations
+
 // real1 => use double for accumulating accelerations
-#define real1 double
+#define real1 float
+//#define real1 double
 
 // real2 => use double for positions
 #define real2 float
 //#define real2 double
 
-// real3 => use double everywhere
+// real3 => use double everywhere else
 #define real3 float
+#define ONE   1.0f
 //#define real3 double
+//#define ONE   1.0
 //#define copysignf copysign
+
+// **************************************************************************
+
 
 /* ************************************************************************** */
 /* How to allocate memory with 16byte alignment?                              */
@@ -49,12 +71,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
     #if defined(__MINGW32__) || defined(mingw32) || defined(MINGW)
         // MinGW
-        #define MALLOC_ALIGNED(target, size, alignment) {target =  (float*) __mingw_aligned_malloc(size, alignment);}
-        #define FREE_ALIGNED(target)                    {__mingw_aligned_free(target);}
+        #define MALLOC_ALIGNED(target, size, alignment)  {target =  (real3 *) __mingw_aligned_malloc(size, alignment);}
+        #define MALLOC_ALIGNED1(target, size, alignment) {target =  (real1 *) __mingw_aligned_malloc(size, alignment);}
+        #define MALLOC_ALIGNED2(target, size, alignment) {target =  (real2 *) __mingw_aligned_malloc(size, alignment);}
+        #define FREE_ALIGNED(target)                     {__mingw_aligned_free(target);}
     #else
         // Microsoft
-        #define MALLOC_ALIGNED(target, size, alignment) {target =  (float*) _aligned_malloc(size, alignment);}
-        #define FREE_ALIGNED(target)                    {_aligned_free(target);}
+        #define MALLOC_ALIGNED(target, size, alignment)  {target =  (real3 *) _aligned_malloc(size, alignment);}
+        #define MALLOC_ALIGNED1(target, size, alignment) {target =  (real1 *) _aligned_malloc(size, alignment);}
+        #define MALLOC_ALIGNED2(target, size, alignment) {target =  (real2 *) _aligned_malloc(size, alignment);}
+        #define FREE_ALIGNED(target)                     {_aligned_free(target);}
     #endif
 
 #else
@@ -68,16 +94,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
         #include <malloc.h>
 
         // use memalign -- seems this is the best choice for most unix/linux versions
-        #define MALLOC_ALIGNED(target, size, alignment) {target =  (real3 *) memalign(alignment, size);}
+        #define MALLOC_ALIGNED(target, size, alignment)  {target =  (real3 *) memalign(alignment, size);}
         #define MALLOC_ALIGNED1(target, size, alignment) {target =  (real1 *) memalign(alignment, size);}
         #define MALLOC_ALIGNED2(target, size, alignment) {target =  (real2 *) memalign(alignment, size);}
-        #define FREE_ALIGNED(target)                    {free(target);}
+        #define FREE_ALIGNED(target)                     {free(target);}
 
     #else
 
         // all others use posix_memalign
-        #define MALLOC_ALIGNED(target, size, alignment) {if (posix_memalign( (void **) &(target), alignment, size) != 0) target=NULL;}
-        #define FREE_ALIGNED(target)                    {free(target);}
+        #define MALLOC_ALIGNED(target, size, alignment)  {if (posix_memalign( (void **) &(target), alignment, size) != 0) target=NULL;}
+        #define MALLOC_ALIGNED1 MALLOC_ALIGNED
+        #define MALLOC_ALIGNED2 MALLOC_ALIGNED
+        #define FREE_ALIGNED(target)                     {free(target);}
 
     #endif
 
@@ -173,8 +201,12 @@ static void do_processFramePP(particle_vectors pos, acc_vectors accel,
             real2 dv_y;
             real2 dv_z;
             real3 squareDistance;
+#ifdef X_FORCES
+            real3 force;
+#else
             real3 force1;
             real3 force2;
+#endif
             real3 invDistance;
 
             dv_x = pos.x[j] - p1_pos_x;
@@ -188,21 +220,43 @@ static void do_processFramePP(particle_vectors pos, acc_vectors accel,
             squareDistance += MIN_STEP2;
 
 #if !defined(USE_FIXED_PHYSICS) && !defined(USE_MODIFIED_PHYSICS)
-	    invDistance = (real3)1.0 / squareDistance;               // 1.0 / (Distance^2)
+	    invDistance = ONE / squareDistance;               // 1.0 / (Distance^2)
+
+#ifndef X_FORCES
             force1 = p1_mass * pos.mass[j] * invDistance;
             force2 = force1;
 #else
+            force  = p1_mass * pos.mass[j] * invDistance;
+#endif
+#else
 #if defined(USE_MODIFIED_PHYSICS)
-	    invDistance = 1.0f / squareDistance;               // 1.0 / (Distance^2)
+            invDistance = ONE / squareDistance;               // 1.0 / (Distance^2)
 #else
     //USE_FIXED_PHYSICS                                        // this is a shortcut to compute 1.0/(sqrt(sqDist) * sqDist)
 	    squareDistance *= squareDistance * squareDistance; //    distance ^6
-	    invDistance  = (real3)1.0 / sqrtf(squareDistance);       //    inverse distance ^3/2
+	    invDistance  = ONE / sqrtf(squareDistance);       //    inverse distance ^3/2
 #endif
+#ifndef X_FORCES
             force1 = pos.mass[j] * invDistance;
             force2 = p1_mass     * invDistance;
+#else
+            force = p1_mass * invDistance * pos.mass[j];
+#endif
 #endif
 
+#ifdef X_FORCES
+	    dv_x = dv_x * force;
+	    dv_y = dv_y * force;
+	    dv_z = dv_z * force;
+
+            p1_accel_x += dv_x;
+            p1_accel_y += dv_y;
+            p1_accel_z += dv_z;
+
+            accel.x[j] -= dv_x;
+            accel.y[j] -= dv_y;
+            accel.z[j] -= dv_z;
+#else
             // sum of accelerations for p1
             p1_accel_x += dv_x * force1;
             p1_accel_y += dv_y * force1;
@@ -212,7 +266,7 @@ static void do_processFramePP(particle_vectors pos, acc_vectors accel,
             accel.x[j] -= dv_x * force2;
             accel.y[j] -= dv_y * force2;
             accel.z[j] -= dv_z * force2;
-
+#endif
         }
 
         // write back buffered acceleration of p1
@@ -275,9 +329,15 @@ void processFramePP(int start, int amount) {
         framedetail[i].accel[1] += accel.y[i] * state.g;
         framedetail[i].accel[2] += accel.z[i] * state.g;
 #else
+#ifdef X_FORCES
+        framedetail[i].accel[0] += accel.x[i] * state.g / pos.mass[i];
+        framedetail[i].accel[1] += accel.y[i] * state.g / pos.mass[i];
+        framedetail[i].accel[2] += accel.z[i] * state.g / pos.mass[i];
+#else
         framedetail[i].accel[0] += accel.x[i] * copysignf(state.g, pos.mass[i]);
         framedetail[i].accel[1] += accel.y[i] * copysignf(state.g, pos.mass[i]);
         framedetail[i].accel[2] += accel.z[i] * copysignf(state.g, pos.mass[i]);
+#endif
 #endif
     }
 
