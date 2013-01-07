@@ -32,7 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 // some flags - define to enable experimental features
 #undef HAVE_SSE
 #define USE_FIXED_PHYSICS
-#define USE_MODIFIED_PHYSICS
+//#define USE_MODIFIED_PHYSICS
+#define FORCES_HD
 
 
 // a few gcc-specific attributes
@@ -242,6 +243,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #define NBODY_METHOD METHOD_PP
 
 #define VectorNew(a) float a[3]
+#define VectorHDNew(a) double a[3]
 
 #define VectorCopy(a,b) { b[0] = a[0]; b[1] = a[1]; b[2] = a[2]; }
 #define VectorAdd(a,b,c) { c[0] = a[0] + b[0]; c[1] = a[1] + b[1]; c[2] = a[2] + b[2]; }
@@ -402,8 +404,15 @@ typedef struct particle_s {
 // things that change less often
 typedef struct particleDetail_s {
 
+#ifndef FORCES_HD
     float mass;
     VectorNew(accel);       // new acceleration
+#else
+    VectorHDNew(accel);
+    VectorHDNew(posHD);
+    VectorHDNew(velHD);
+    float mass;
+#endif
     float col[4];
     unsigned int particleSprite;
 

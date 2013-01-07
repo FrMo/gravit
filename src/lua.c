@@ -140,6 +140,25 @@ void luag_TableToVector(lua_State *L, float *v) {
 
 }
 
+void luag_TableToVectorHD(lua_State *L, double *v) {
+
+    lua_pushstring(L, "x");
+    lua_gettable(L, -2);
+    v[0] = lua_tonumber(L, -1);
+    lua_pop(L, 1);
+
+    lua_pushstring(L, "y");
+    lua_gettable(L, -2);
+    v[1] = lua_tonumber(L, -1);
+    lua_pop(L, 1);
+
+    lua_pushstring(L, "z");
+    lua_gettable(L, -2);
+    v[2] = lua_tonumber(L, -1);
+    lua_pop(L, 1);
+
+}
+
 int luag_load(lua_State *L) {
     
     char *s = (char*)lua_tostring(L, -1);
@@ -158,8 +177,13 @@ int luag_spawn(lua_State *L) {
 
     particle_t *p;
     particleDetail_t *pd;
+#ifndef FORCES_HD
     VectorNew(pos);
     VectorNew(vel);
+#else
+    VectorHDNew(pos);
+    VectorHDNew(vel);
+#endif
     float mass;
     int id;
 
@@ -168,11 +192,19 @@ int luag_spawn(lua_State *L) {
     mass = lua_tonumber(L, -1);
     id = -1;
 
+#ifndef FORCES_HD
     lua_pop(L, 1);
     luag_TableToVector(L, vel);
 
     lua_pop(L, 1);
     luag_TableToVector(L, pos);
+#else
+    lua_pop(L, 1);
+    luag_TableToVectorHD(L, vel);
+
+    lua_pop(L, 1);
+    luag_TableToVectorHD(L, pos);
+#endif
 
     lua_pop(L, 1);
     id = lua_tonumber(L, -1);
@@ -185,8 +217,12 @@ int luag_spawn(lua_State *L) {
     p = getParticleFirstFrame(id);
     pd = getParticleDetail(id);
 
-    VectorCopy(pos, p->pos);
-    VectorCopy(vel, p->vel);
+#ifdef FORCES_HD
+    VectorCopy(pos, pd->posHD);
+    VectorCopy(vel, pd->velHD);
+#endif
+    VectorCopy((float)pos, p->pos);
+    VectorCopy((float)vel, p->vel);
     pd->mass = mass;
 
     view.recordParticlesDone++;

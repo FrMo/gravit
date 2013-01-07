@@ -236,8 +236,15 @@ static void moveParticles() {
         p = state.particleHistory + state.particleCount * (state.frame) + i;
         pd = getParticleDetail(i);
 
+#ifndef FORCES_HD
         VectorMultiplyAdd(pd->accel, 0.5, p->vel);
         VectorAdd(p->pos, p->vel, p->pos);
+#else
+        VectorMultiplyAdd(pd->accel, 0.5, pd->velHD);
+        VectorAdd(pd->posHD, pd->velHD, pd->posHD);
+        VectorCopy((float) pd->velHD, p->vel);
+        VectorCopy((float) pd->posHD, p->pos);
+#endif
     }
 
     // compute new accelerations
@@ -255,7 +262,12 @@ static void moveParticles() {
     for (i = 0; i < state.particleCount; i++) {
         p = state.particleHistory + state.particleCount * (state.frame) + i;
         pd = getParticleDetail(i);
+#ifndef FORCES_HD
 	VectorMultiplyAdd(pd->accel, 0.5, p->vel);
+#else
+	VectorMultiplyAdd(pd->accel, 0.5, pd->velHD);
+	VectorCopy((float) pd->velHD, p->vel);
+#endif
     }
 
 

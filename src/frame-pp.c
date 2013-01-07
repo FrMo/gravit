@@ -43,13 +43,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 // * real3: inner force calculations
 
 // real1 => use double for accumulating accelerations
-#define real1 float
-//#define real1 double
+//#define real1 float
+#define real1 double
 
 // real2 => use double for positions and distances
-#define real2 float
+//#define real2 float
 #define real2b float
-//#define real2 double
+#define real2 double
 //#define real2b double
 
 // real3 => use double everywhere else
@@ -57,7 +57,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #define ONE   1.0f
 //#define real3 double
 //#define ONE   1.0
-//#define copysignf copysign
+#define copysignf copysign
 
 // **************************************************************************
 
@@ -313,9 +313,16 @@ void processFramePP(int start, int amount) {
 
     // copy frame data to vector-friendly arrays
     for (i=0; i<particles_max; i++) {
+#ifndef FORCES_HD
         pos.x[i] = framebase[i].pos[0];
         pos.y[i] = framebase[i].pos[1];
         pos.z[i] = framebase[i].pos[2];
+#else
+        pos.x[i] = state.particleDetail[i].posHD[0];
+        pos.y[i] = state.particleDetail[i].posHD[1];
+        pos.z[i] = state.particleDetail[i].posHD[2];
+#endif
+
         pos.mass[i] = state.particleDetail[i].mass;
 #ifdef X_FORCES
         // need to avoid division by zero

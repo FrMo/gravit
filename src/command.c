@@ -548,9 +548,15 @@ cmdSpawnRestartSpawning:
     // step 2 - center positions, remove average velocity
     for (i = 0; i < state.particleCount; i++) {
         particle_t *p;
+        particleDetail_t *pd;
         p = getParticleCurrentFrame(i);
         VectorSub(p->pos, pos, p->pos);
         VectorSub(p->vel, vel, p->vel);
+#ifdef FORCES_HD
+        pd = getParticleDetail(i);
+        VectorSub(pd->posHD, (double) pos, pd->posHD);
+        VectorSub(pd->velHD, (double) vel, pd->velHD);
+#endif
     }
 
 #endif
@@ -892,9 +898,10 @@ void cmdLoadFrameDump(char *arg) {
         VectorCopy(si.face, view.face);
         VectorCopy(si.lastCenter, view.lastCenter);
         view.glow = si.glow;
-        state.physics = si.physics;
-        state.g = si.g;
-        state.gbase = si.gbase;
+        // XX not yet possible
+        //state.physics = si.physics;
+        //state.g = si.g;
+        //state.gbase = si.gbase;
         view.colorMassMax = si.colorMassMax;
     } else {
         conAdd(LNORM, "Saved data is from older gravit version.");
@@ -927,6 +934,7 @@ void cmdLoadFrameDump(char *arg) {
 
     // get particleDetail from saveDetail
     for (i = 0; i < state.particleCount; i++) {
+        particle_t *p;
         particleDetail_t *pd;
         pd = getParticleDetail(i);
         pd->mass   = sd[i].mass;
@@ -936,6 +944,11 @@ void cmdLoadFrameDump(char *arg) {
         pd->col[3] = sd[i].col[3];
 	pd->particleSprite=SPRITE_DEFAULT;
 	VectorZero(pd->accel);
+#ifdef FORCES_HD
+        p = getParticleCurrentFrame(i);
+        VectorCopy((double) p->pos, pd->posHD);
+        VectorCopy((double) p->vel, pd->velHD);
+#endif
     }
 
     state.currentFrame = 0;
